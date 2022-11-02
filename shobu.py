@@ -108,7 +108,8 @@ class Game:
                 
         return (moves, (passive_left_headings, passive_right_headings))
 
-
+    def board_evalutation(self,n,board):
+        self.get_available_aggressive_moves()
 
     def depth_n_ai(self,n):
 
@@ -121,9 +122,9 @@ class Game:
         moves = self.get_available_moves(self.ai_player)[0]
         evals = np.zeros(len(moves))
         for move_num in range(len(moves)):
-            if n ==2:
-                i+=1
-                print(i)
+            # if n ==2:
+            #     i+=1
+            #     print(i)
             passive, aggressive = moves[move_num]
             possible_game = copy.deepcopy(self)
             possible_game.boards[passive[0]].stones[self.ai_player].remove(passive[1])
@@ -138,6 +139,9 @@ class Game:
                     possible_game.boards[aggressive[0]].stones[self.user_player].add(pushed_stone_end_coord)
             possible_eval = possible_game.evaluation(self.ai_player)
             evals[move_num] = possible_eval
+        print(np.where(evals == np.max(evals))[0][0])
+        best_move = moves[np.where(evals == np.max(evals))[0][0]]
+
         # get indexes for top 10% of evals
         # iterate depth
         # for move with eval > 90%:
@@ -402,7 +406,7 @@ class Game:
                         if heading not in aggressive_dict.keys():
                             aggressive_dict[heading] = set()
                         aggressive_dict[heading].add((board_num,(start_coord,end_coord),push))
-        moves = list
+        moves = list()
         passive_left_headings = 0
         passive_right_headings = 0
         for heading, passive_moves in passive_dict.items():
@@ -411,8 +415,8 @@ class Game:
             passive_right_moves = set(filter(lambda move: move[0] == 1 or move[0] == 3, passive_moves))
             aggressive_left_moves = set(filter(lambda move: move[0] == 0 or move[0] == 2, aggressive_moves))
             aggressive_right_moves = set(filter(lambda move: move[0] == 1 or move[0] == 3, aggressive_moves))
-            left_right_moves = itertools.product(passive_left_moves,aggressive_right_moves)
-            right_left_moves = itertools.product(passive_right_moves,aggressive_left_moves)
+            left_right_moves = list(itertools.product(passive_left_moves,aggressive_right_moves))
+            right_left_moves = list(itertools.product(passive_right_moves,aggressive_left_moves))
             moves += left_right_moves + right_left_moves
             if len(passive_left_moves) > 0:
                 passive_left_headings += 1
@@ -521,11 +525,7 @@ class Game:
 
         return moves
 
-    def get_available_aggressive_moves(self, player):
-
-        moves = [None,None,None,None]
-
-        def get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones):
+    def get_stone_moves(self, final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones):
             pushed = None
             if final_loc in player_stones:
                 return False
@@ -549,138 +549,144 @@ class Game:
                         pushed = (pushed_stone_loc, final_loc_plus_1)
             return (final_loc, pushed)
 
+    def get_board_aggressive_moves(self, player, board):
+        board_moves = {}
+        player_stones = self.boards[board].stones[player]
+        enemy_stones = self.boards[board].stones[(player + 1) % 2]
+
+        for stone in player_stones:
+            
+            stone_moves = [] # ((final coods), ((stone_pushed),(stone_pushed final coods)), (dy, dx))
+
+            x = stone[1]
+            y = stone[0]
+
+            left_room = min(x, 2)
+            up_room = min(y, 2)
+            right_room = min(3 - x, 2)
+            down_room = min(3 - y, 2)
+
+            up_left_room = min(left_room, up_room)
+            up_right_room = min(right_room, up_room)
+            down_right_room = min(right_room, down_room)
+            down_left_room = min(left_room, down_room)
+
+            pushed_stone_loc = None
+
+            dy = 0
+            for dx in range(1, left_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y, x - dx)
+                final_loc_plus_1 = (y, x - dx - 1)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (dy, -dx))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+            
+            pushed_stone_loc = None
+            for dx in range(1, right_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y, x + dx)
+                final_loc_plus_1 = (y, x + dx + 1)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (dy, dx))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+
+            dx = 0
+            pushed_stone_loc = None
+            for dy in range(1, up_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y - dy, x)
+                final_loc_plus_1 = (y - dy - 1, x)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (-dy, dx))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+
+            pushed_stone_loc = None
+            for dy in range(1, down_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y + dy, x)
+                final_loc_plus_1 = (y + dy + 1, x)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (dy, dx))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+
+            pushed_stone_loc = None
+            for dr in range(1, up_left_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y - dr, x - dr)
+                final_loc_plus_1 = (y - dr - 1, x - dr - 1)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (-dr, -dr))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+
+            pushed_stone_loc = None
+            for dr in range(1, up_right_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y - dr, x + dr)
+                final_loc_plus_1 = (y - dr - 1, x + dr + 1)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (-dr, dr))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+
+            pushed_stone_loc = None
+            for dr in range(1, down_right_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y + dr, x + dr)
+                final_loc_plus_1 = (y + dr + 1, x + dr + 1)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (dr, dr))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+            
+            pushed_stone_loc = None
+            for dr in range(1, down_left_room+1):
+                # Add move if there are no blocking stones
+                final_loc = (y + dr, x - dr)
+                final_loc_plus_1 = (y + dr + 1, x - dr - 1)
+                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                if move:
+                    full_move = (move[0], move[1], (dr, -dr))
+                    stone_moves.append(full_move)
+                    if full_move[1]: 
+                        # There is a pushed stone
+                        pushed_stone_loc = full_move[1][0]
+            board_moves[stone] = stone_moves
+        return board_moves
+
+    def get_available_aggressive_moves(self, player):
+
+        moves = [None,None,None,None]
+
         for board in range(4):
 
-            board_moves = {}
-            player_stones = self.boards[board].stones[player]
-            enemy_stones = self.boards[board].stones[(player + 1) % 2]
-
-            for stone in player_stones:
-                
-                stone_moves = [] # ((final coods), ((stone_pushed),(stone_pushed final coods)), (dy, dx))
-
-                x = stone[1]
-                y = stone[0]
-
-                left_room = min(x, 2)
-                up_room = min(y, 2)
-                right_room = min(3 - x, 2)
-                down_room = min(3 - y, 2)
-
-                up_left_room = min(left_room, up_room)
-                up_right_room = min(right_room, up_room)
-                down_right_room = min(right_room, down_room)
-                down_left_room = min(left_room, down_room)
-
-                pushed_stone_loc = None
-
-                dy = 0
-                for dx in range(1, left_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y, x - dx)
-                    final_loc_plus_1 = (y, x - dx - 1)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (dy, -dx))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-                
-                pushed_stone_loc = None
-                for dx in range(1, right_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y, x + dx)
-                    final_loc_plus_1 = (y, x + dx + 1)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (dy, dx))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-
-                dx = 0
-                pushed_stone_loc = None
-                for dy in range(1, up_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y - dy, x)
-                    final_loc_plus_1 = (y - dy - 1, x)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (-dy, dx))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-
-                pushed_stone_loc = None
-                for dy in range(1, down_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y + dy, x)
-                    final_loc_plus_1 = (y + dy + 1, x)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (dy, dx))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-
-                pushed_stone_loc = None
-                for dr in range(1, up_left_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y - dr, x - dr)
-                    final_loc_plus_1 = (y - dr - 1, x - dr - 1)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (-dr, -dr))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-
-                pushed_stone_loc = None
-                for dr in range(1, up_right_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y - dr, x + dr)
-                    final_loc_plus_1 = (y - dr - 1, x + dr + 1)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (-dr, dr))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-
-                pushed_stone_loc = None
-                for dr in range(1, down_right_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y + dr, x + dr)
-                    final_loc_plus_1 = (y + dr + 1, x + dr + 1)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (dr, dr))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-                
-                pushed_stone_loc = None
-                for dr in range(1, down_left_room+1):
-                    # Add move if there are no blocking stones
-                    final_loc = (y + dr, x - dr)
-                    final_loc_plus_1 = (y + dr + 1, x - dr - 1)
-                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                    if move:
-                        full_move = (move[0], move[1], (dr, -dr))
-                        stone_moves.append(full_move)
-                        if full_move[1]: 
-                            # There is a pushed stone
-                            pushed_stone_loc = full_move[1][0]
-
-                board_moves[stone] = stone_moves
-            moves[board] = board_moves
+            moves[board] = self.get_board_aggressive_moves(player, board)
         return moves
 
 my_game = Game()
