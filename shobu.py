@@ -124,7 +124,7 @@ class Game:
                 
         return (moves, (passive_left_headings, passive_right_headings))
 
-    def board_evaluation_away_boards(self,n,player,board,top = True):
+    def board_evaluation_away_boards(self,n,player,board,top = True, alpha = -np.infty, beta = np.infty):
         # (Eval, best move, eval_do_nothing)
         enemy = (player + 1) % 2
         if n > 0:
@@ -133,13 +133,19 @@ class Game:
             for move_num in range(len(moves)):
                 possible_board = copy.deepcopy(board)
                 possible_board.make_aggressive_move(player,moves[move_num])
-                eval, eval_do_passive, eval_do_nothing = self.board_evaluation_home_boards(n-1,enemy,possible_board,False)
+                eval, eval_do_passive, eval_do_nothing = self.board_evaluation_home_boards(n-1,enemy,possible_board,False,-beta,-alpha)
                 eval *= -1
                 eval_do_passive *= -1
                 eval_do_nothing *= -1
-                evals[move_num] = 0.25 * eval + 0.5 * eval_do_passive + 0.25 * eval_do_nothing
+                total_eval = 0.25 * eval + 0.5 * eval_do_passive + 0.25 * eval_do_nothing
+                if total_eval >= beta:
+                    return (beta, beta)
+                elif total_eval > alpha:
+                    alpha = total_eval
+                evals[move_num] = total_eval
+
            
-            eval, eval_do_passive, eval_do_nothing = self.board_evaluation_home_boards(n-1,enemy,copy.deepcopy(board),False)
+            eval, eval_do_passive, eval_do_nothing = self.board_evaluation_home_boards(n-1,enemy,copy.deepcopy(board),False,-beta,-alpha)
             eval *= -1
             eval_do_passive *= -1
             eval_do_nothing *= -1
@@ -151,6 +157,7 @@ class Game:
             else:
                 return (-1, eval_do_nothing)
         else:
+            # TODO add quiescence
             my_stones_num = len(board.stones[player])
             enemy_stones_num = len(board.stones[enemy])
             if my_stones_num == 0:
@@ -161,7 +168,7 @@ class Game:
             eval = 2*(my_stones_num / sum_stones - 0.5)
             return (eval, eval)
 
-    def board_evaluation_home_boards(self,n,player,board,top = True):
+    def board_evaluation_home_boards(self,n,player,board,top = True, alpha = -np.infty, beta = np.infty):
         # (Eval, best move, eval_do_passive, eval_do_nothing)
 
         
@@ -177,12 +184,17 @@ class Game:
                     passive_inds.append(move_num)
                 possible_board = copy.deepcopy(board)
                 possible_board.make_aggressive_move(player,move)
-                eval, eval_do_nothing = self.board_evaluation_away_boards(n-1,enemy,possible_board,False)
+                eval, eval_do_nothing = self.board_evaluation_away_boards(n-1,enemy,possible_board,False,-beta,-alpha)
                 eval *= -1
                 eval_do_nothing *= -1
-                evals[move_num] = 0.25 * eval + 0.75 * eval_do_nothing
+                total_eval = 0.25 * eval + 0.75 * eval_do_nothing
+                if total_eval >= beta:
+                    return (beta, beta, beta)
+                elif total_eval > alpha:
+                    alpha = total_eval
+                evals[move_num] = total_eval
                 
-            eval, eval_do_nothing = self.board_evaluation_away_boards(n-1,player,copy.deepcopy(board),False)
+            eval, eval_do_nothing = self.board_evaluation_away_boards(n-1,player,copy.deepcopy(board),False,-beta,-alpha)
             eval *= -1
             eval_do_nothing *= -1
             eval_do_nothing = 0.25 * eval + 0.75 * eval_do_nothing
@@ -199,6 +211,7 @@ class Game:
             else:
                 return (-1, -1, eval_do_nothing)
         else:
+            # TODO add quiescence
             my_stones_num = len(board.stones[player])
             enemy_stones_num = len(board.stones[enemy])
             if my_stones_num == 0:
@@ -216,6 +229,10 @@ class Game:
             num_stones_p1 = len(self.boards[board_num].stones[1])
             max_stones = max(num_stones_p0, num_stones_p1)
             min_stones = min(num_stones_p0, num_stones_p1)
+            if min_stones == 0:
+                importance_board = np.zeros(4)
+                importance_board[board_num] = 1
+                return importance_board
             importance_board[board_num] = max_stones / (4 * min_stones ** 2)
         sum_importances = sum(importance_board)
         normalized_importances = importance_board / sum_importances
