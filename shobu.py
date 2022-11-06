@@ -37,13 +37,51 @@ class Game:
         self.eval = 0
 
     def play_game(self):
+        self.print_game()
+        # Opening passive move to make a more balanced game
+        # passive = None
+        # valid_passive = False
+        # while not passive or not valid_passive:
+        #     passive_move_user = input("Passive Move: ")
+        #     passive = self.convert_move_to_computer(passive_move_user)
+        #     if not passive:
+        #         print("Passive move must stay on the same board")
+        #     else:
+        #         valid_passive = self.try_passive_move(self.user_player,passive[0],passive[1],passive[2])
+        #     self.last_passive = passive
+        #     print()
+
         while True:
             #self.get_ai_random_move()
+            self.print_game()
+            if self.evaluation(self.user_player) > 0.99:
+                print("You Win!")
+                break
+            elif self.evaluation(self.ai_player) > 0.99:
+                print("You Lose!")
+                break
+            self.depth_n_ai(3,self.ai_player)
+            #self.get_user_move()
+            # if self.evaluation(self.ai_player) < -0.0 or self.evaluation(self.ai_player) > 0.0:
+            #     self.depth_n_ai(3,self.ai_player)
+            # else:
+                # self.depth_n_ai(2,self.ai_player)
+            self.print_game()
+            if self.evaluation(self.user_player) > 0.99:
+                print("You Win!")
+                break
+            elif self.evaluation(self.ai_player) > 0.99:
+                print("You Lose!")
+                break
+            #self.get_user_move()
+            #self.depth_n_ai(3,self.ai_player)
+            self.depth_n_ai(3,self.user_player)
             
-            self.print_game()
-            self.get_user_move()
-            self.print_game()
-            self.depth_n_ai(3)
+            # if self.evaluation(self.ai_player) < -0.0 or self.evaluation(self.ai_player) > 0.0:
+            #     self.depth_n_ai(3,self.user_player)
+            # else:
+            #     self.depth_n_ai(2,self.user_player)
+            
             
 
     def get_ai_random_move(self):
@@ -238,7 +276,7 @@ class Game:
         normalized_importances = importance_board / sum_importances
         return normalized_importances
 
-    def depth_n_ai(self,n):
+    def depth_n_ai_board_by_board(self,n):
             
         board_evaluations = [None,None,None,None]
         move_eval_boost = [0, 0, 0, 0]
@@ -284,30 +322,110 @@ class Game:
         self.boards[passive_move[0]].make_aggressive_move(self.ai_player,passive_move[1])
         self.boards[aggressive_move[0]].make_aggressive_move(self.ai_player,aggressive_move[1])
 
-    
+    def depth_n_ai(self,n,player,top=True,alpha=-np.infty,beta=np.infty):
+        basic_eval = self.evaluation(player)
+        if n == 0 or basic_eval == -1 or basic_eval == 1:
+            return basic_eval
+        enemy = (player + 1) % 2
+        best_move = None
+        i = 0
+        moves = self.get_available_moves(player)[0]
+        for move_num in range(len(moves)):
+            # if top:
+            #     i+=1
+            #     print(i)
+            passive, aggressive = moves[move_num]
+            self.boards[passive[0]].stones[player].remove(passive[1])
+            self.boards[passive[0]].stones[player].add(passive[2])
+            self.boards[aggressive[0]].stones[player].remove(aggressive[1][0])
+            self.boards[aggressive[0]].stones[player].add(aggressive[1][1])
+            if aggressive[2]:
+                pushed_stone_start_coord = aggressive[2][0]
+                pushed_stone_end_coord = aggressive[2][1]
+                self.boards[aggressive[0]].stones[enemy].remove(pushed_stone_start_coord)
+                if pushed_stone_end_coord:
+                    self.boards[aggressive[0]].stones[enemy].add(pushed_stone_end_coord)
+            #possible_eval = possible_game.evaluation(player)
+            possible_eval = -self.depth_n_ai(n-1,enemy,False,-beta,-alpha) \
+
+            # Undo the move
+            self.boards[passive[0]].stones[player].remove(passive[2])
+            self.boards[passive[0]].stones[player].add(passive[1])
+            self.boards[aggressive[0]].stones[player].remove(aggressive[1][1])
+            self.boards[aggressive[0]].stones[player].add(aggressive[1][0])
+
+            if aggressive[2]:
+                pushed_stone_start_coord = aggressive[2][0]
+                pushed_stone_end_coord = aggressive[2][1]
+                if pushed_stone_end_coord:
+                    self.boards[aggressive[0]].stones[enemy].remove(pushed_stone_end_coord)
+                self.boards[aggressive[0]].stones[enemy].add(pushed_stone_start_coord)
+                
+            
+            # Future wins/losses are slightly discounted
+            if np.abs(possible_eval) == 1:
+                possible_eval *= 0.99 
+                
+            if possible_eval >= beta:
+                return beta
+            elif possible_eval > alpha:
+                alpha = possible_eval
+                best_move = (passive, aggressive)
+
+        if top:
+            if player == self.user_player:
+                self.eval = alpha
+            else:
+                self.eval = -alpha
+            passive_move, aggressive_move = best_move
+
+            self.last_passive = passive_move
+            self.last_aggressive = (aggressive_move[0], aggressive_move[1][0], aggressive_move[2], aggressive_move[1][1])
+
+            # self.boards[passive_move[0]].make_aggressive_move(self.ai_player,passive_move[1])
+            # self.boards[aggressive_move[0]].make_aggressive_move(self.ai_player,aggressive_move[1])
+
+            self.boards[passive_move[0]].stones[player].remove(passive_move[1])
+            self.boards[passive_move[0]].stones[player].add(passive_move[2])
+            
+            
+
+            self.boards[aggressive_move[0]].stones[player].remove(aggressive_move[1][0])
+            self.boards[aggressive_move[0]].stones[player].add(aggressive_move[1][1])
+            if aggressive_move[2]:
+                pushed_stone_start_coord = aggressive_move[2][0]
+                pushed_stone_end_coord = aggressive_move[2][1]
+                self.boards[aggressive_move[0]].stones[enemy].remove(pushed_stone_start_coord)
+                if pushed_stone_end_coord:
+                    self.boards[aggressive_move[0]].stones[enemy].add(pushed_stone_end_coord)
+        else:
+            return alpha
+
+            
+
+
     def evaluation(self, player):
         enemy = (player + 1) % 2
-        move_fraction = (self.get_available_moves(player)[1][0] + self.get_available_moves(player)[1][1]) / (self.get_available_moves(enemy)[1][0] + self.get_available_moves(enemy)[1][1])
-        num_moves_evaluation = move_fraction - 0.5
-        my_stones_board = [0, 0, 0, 0]
-        enemy_stones_board = [0, 0, 0, 0]
+        #moves = self.get_available_moves(player)
+        #move_fraction = (moves[1][0] + moves(player)[1][1]) / (moves(enemy)[1][0] + moves(enemy)[1][1])
+        #num_moves_evaluation = move_fraction - 0.5
         importance_board = [0, 0, 0, 0]
         eval_board = [0, 0, 0, 0]
         for board_num in range(4):
-            my_stones_board[board_num] = len(self.boards[board_num].stones[player])
-            enemy_stones_board[board_num] = len(self.boards[board_num].stones[enemy])
-            if my_stones_board[board_num] == 0:
-                return 0
-            elif enemy_stones_board[board_num] == 0:
+            my_stones = len(self.boards[board_num].stones[player])
+            enemy_stones = len(self.boards[board_num].stones[enemy])
+            if my_stones == 0:
+                return -1
+            elif enemy_stones == 0:
                 return 1
-            max_stones = max(my_stones_board[board_num], enemy_stones_board[board_num])
-            min_stones = min(my_stones_board[board_num], enemy_stones_board[board_num])
-            sum_stones = my_stones_board[board_num] + enemy_stones_board[board_num]
-            importance_board[board_num] = max_stones / (4 * min_stones ** 2)
-            eval_board[board_num] = my_stones_board[board_num] / sum_stones
+            max_stones = max(my_stones, enemy_stones)
+            min_stones = min(my_stones, enemy_stones)
+            sum_stones = my_stones + enemy_stones
+            importance_board[board_num] = max_stones / (min_stones ** 3)
+            eval_board[board_num] = my_stones / sum_stones
         sum_importances = sum(importance_board)
         num_stones_evaluation = np.dot(eval_board, importance_board) / sum_importances
-        return 2 * ( 0.7 * num_stones_evaluation + 0.3 * num_moves_evaluation - 0.5)
+        return 2 * ( num_stones_evaluation  - 0.5)
 
     def get_user_move(self):
         success = False
