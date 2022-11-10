@@ -5,6 +5,7 @@ import numpy as np
 import random
 import itertools
 import copy
+import threading
 
 class Board:
 
@@ -22,7 +23,7 @@ class Board:
             if pushed_stone_end_coord:
                 self.stones[enemy].add(pushed_stone_end_coord)
     
-    
+global top_alpha
 
 
 class Game:
@@ -35,6 +36,8 @@ class Game:
         self.user_player = 0
         self.ai_player = 1
         self.eval = 0
+        self.best_move = None
+        self.available_moves = [None,None,None,None]
 
     def play_game(self):
         self.print_game()
@@ -60,7 +63,7 @@ class Game:
             elif self.evaluation(self.ai_player) > 0.99:
                 print("You Lose!")
                 break
-            self.depth_n_ai(3,self.ai_player)
+            self.depth_n_ai(4,self.ai_player)
             #self.get_user_move()
             # if self.evaluation(self.ai_player) < -0.0 or self.evaluation(self.ai_player) > 0.0:
             #     self.depth_n_ai(3,self.ai_player)
@@ -73,9 +76,9 @@ class Game:
             elif self.evaluation(self.ai_player) > 0.99:
                 print("You Lose!")
                 break
-            #self.get_user_move()
-            #self.depth_n_ai(3,self.ai_player)
-            self.depth_n_ai(3,self.user_player)
+            self.get_user_move()
+            #self.depth_n_ai(4,self.ai_player)
+            #self.depth_n_ai(4,self.user_player)
             
             # if self.evaluation(self.ai_player) < -0.0 or self.evaluation(self.ai_player) > 0.0:
             #     self.depth_n_ai(3,self.user_player)
@@ -322,19 +325,17 @@ class Game:
         self.boards[passive_move[0]].make_aggressive_move(self.ai_player,passive_move[1])
         self.boards[aggressive_move[0]].make_aggressive_move(self.ai_player,aggressive_move[1])
 
-    def depth_n_ai(self,n,player,top=True,alpha=-np.infty,beta=np.infty):
-        basic_eval = self.evaluation(player)
-        if n == 0 or basic_eval == -1 or basic_eval == 1:
-            return basic_eval
+    def evaluate_moves(self,moves,player,n,alpha_beta=True,alpha=-np.infty,beta=np.infty,top=True):
+        global top_alpha
         enemy = (player + 1) % 2
+        basic_eval = self.evaluation(player)
         best_move = None
-        i = 0
-        moves = self.get_available_moves(player)[0]
-        for move_num in range(len(moves)):
-            # if top:
-            #     i+=1
-            #     print(i)
-            passive, aggressive = moves[move_num]
+        if basic_eval == -1 or basic_eval == 1:
+            return (basic_eval, None)
+        for move in moves:
+            passive, aggressive = move
+
+            # Make the move
             self.boards[passive[0]].stones[player].remove(passive[1])
             self.boards[passive[0]].stones[player].add(passive[2])
             self.boards[aggressive[0]].stones[player].remove(aggressive[1][0])
@@ -345,9 +346,15 @@ class Game:
                 self.boards[aggressive[0]].stones[enemy].remove(pushed_stone_start_coord)
                 if pushed_stone_end_coord:
                     self.boards[aggressive[0]].stones[enemy].add(pushed_stone_end_coord)
-            #possible_eval = possible_game.evaluation(player)
-            possible_eval = -self.depth_n_ai(n-1,enemy,False,-beta,-alpha) \
 
+            # Look deeper        
+            
+            if n == 1:
+                possible_eval = self.evaluation(player)
+            else:
+                followup_moves = self.get_available_moves(enemy)[0]
+                possible_eval, _ = self.evaluate_moves(followup_moves,enemy,n-1, not alpha_beta, alpha, beta, top=False)
+                possible_eval *= -1
             # Undo the move
             self.boards[passive[0]].stones[player].remove(passive[2])
             self.boards[passive[0]].stones[player].add(passive[1])
@@ -363,57 +370,112 @@ class Game:
                 
             
             # Future wins/losses are slightly discounted
-            if np.abs(possible_eval) == 1:
-                possible_eval *= 0.99 
-                
-            if possible_eval >= beta:
-                return beta
-            elif possible_eval > alpha:
-                alpha = possible_eval
-                best_move = (passive, aggressive)
+            # if np.abs(possible_eval) > 0.9:
+            #     possible_eval *= 0.99 
 
-        if top:
-            if player == self.user_player:
-                self.eval = alpha
+            
+            # Alpha beta pruning
+            if alpha_beta:
+                if possible_eval >= beta:
+                    return (beta, None)
+                elif possible_eval > alpha:
+                    alpha = possible_eval
+                    best_move = (passive, aggressive)
             else:
-                self.eval = -alpha
-            passive_move, aggressive_move = best_move
-
-            self.last_passive = passive_move
-            self.last_aggressive = (aggressive_move[0], aggressive_move[1][0], aggressive_move[2], aggressive_move[1][1])
-
-            # self.boards[passive_move[0]].make_aggressive_move(self.ai_player,passive_move[1])
-            # self.boards[aggressive_move[0]].make_aggressive_move(self.ai_player,aggressive_move[1])
-
-            self.boards[passive_move[0]].stones[player].remove(passive_move[1])
-            self.boards[passive_move[0]].stones[player].add(passive_move[2])
-            
-            
-
-            self.boards[aggressive_move[0]].stones[player].remove(aggressive_move[1][0])
-            self.boards[aggressive_move[0]].stones[player].add(aggressive_move[1][1])
-            if aggressive_move[2]:
-                pushed_stone_start_coord = aggressive_move[2][0]
-                pushed_stone_end_coord = aggressive_move[2][1]
-                self.boards[aggressive_move[0]].stones[enemy].remove(pushed_stone_start_coord)
-                if pushed_stone_end_coord:
-                    self.boards[aggressive_move[0]].stones[enemy].add(pushed_stone_end_coord)
+                if -possible_eval <= top_alpha or -possible_eval <= alpha:
+                    return (-alpha, None)
+                elif -possible_eval < beta:
+                    beta = -possible_eval
+                    best_move = (passive, aggressive)
+        if top:
+            self.eval = alpha
+            self.best_move = best_move
+            if alpha > top_alpha:
+                top_alpha = alpha
         else:
-            return alpha
+            if alpha_beta:
+                return (alpha, best_move)
+            else:
+                return (-beta, best_move)
+
+    def depth_n_ai(self,n,player):
+
+        global top_alpha
+        top_alpha = -np.infty
+
+        enemy = (player + 1) % 2
+        best_move = None
+        best_eval = None
+        i = 0
+        moves = self.get_available_moves(player)[0]
+        game_1 = copy.deepcopy(self)
+        game_2 = copy.deepcopy(self)
+        game_3 = copy.deepcopy(self)
+        game_4 = copy.deepcopy(self)
+        t1 = threading.Thread(game_1.evaluate_moves(moves[0:int(len(moves)/4)],player,n))
+        t2 = threading.Thread(game_2.evaluate_moves(moves[int(len(moves)/4):int(len(moves)/2)],player,n))
+        t3 = threading.Thread(game_3.evaluate_moves(moves[int(len(moves)/2):int(3*len(moves)/4)],player,n))
+        t4 = threading.Thread(game_4.evaluate_moves(moves[int(3*len(moves)/4):len(moves)],player,n))
+
+        # start threads
+        t1.start()
+        t2.start()
+        t3.start()
+        t4.start()
+    
+        # wait until threads finish their job
+        t1.join()
+        t2.join()
+        t3.join()
+        t4.join()
+        
+        evals = [game_1.eval, game_2.eval, game_3.eval, game_4.eval]
+        moves = [game_1.best_move, game_2.best_move, game_3.best_move]
+        best_eval = np.max(evals)
+        best_game = np.where(evals == best_eval)[0][0]
+
+        best_move = moves[best_game]
+
+        # Make the best move
+        if player == self.user_player:
+            self.eval = best_eval
+        else:
+            self.eval = -best_eval
+        passive_move, aggressive_move = best_move
+
+        self.last_passive = passive_move
+        self.last_aggressive = (aggressive_move[0], aggressive_move[1][0], aggressive_move[2], aggressive_move[1][1])
+
+        # self.boards[passive_move[0]].make_aggressive_move(self.ai_player,passive_move[1])
+        # self.boards[aggressive_move[0]].make_aggressive_move(self.ai_player,aggressive_move[1])
+
+        self.boards[passive_move[0]].stones[player].remove(passive_move[1])
+        self.boards[passive_move[0]].stones[player].add(passive_move[2])
+        
+        
+
+        self.boards[aggressive_move[0]].stones[player].remove(aggressive_move[1][0])
+        self.boards[aggressive_move[0]].stones[player].add(aggressive_move[1][1])
+        if aggressive_move[2]:
+            pushed_stone_start_coord = aggressive_move[2][0]
+            pushed_stone_end_coord = aggressive_move[2][1]
+            self.boards[aggressive_move[0]].stones[enemy].remove(pushed_stone_start_coord)
+            if pushed_stone_end_coord:
+                self.boards[aggressive_move[0]].stones[enemy].add(pushed_stone_end_coord)
+
 
             
 
 
     def evaluation(self, player):
-        enemy = (player + 1) % 2
         #moves = self.get_available_moves(player)
         #move_fraction = (moves[1][0] + moves(player)[1][1]) / (moves(enemy)[1][0] + moves(enemy)[1][1])
         #num_moves_evaluation = move_fraction - 0.5
         importance_board = [0, 0, 0, 0]
         eval_board = [0, 0, 0, 0]
         for board_num in range(4):
-            my_stones = len(self.boards[board_num].stones[player])
-            enemy_stones = len(self.boards[board_num].stones[enemy])
+            my_stones = len(self.boards[board_num].stones[0])
+            enemy_stones = len(self.boards[board_num].stones[1])
             if my_stones == 0:
                 return -1
             elif enemy_stones == 0:
@@ -421,11 +483,15 @@ class Game:
             max_stones = max(my_stones, enemy_stones)
             min_stones = min(my_stones, enemy_stones)
             sum_stones = my_stones + enemy_stones
-            importance_board[board_num] = max_stones / (min_stones ** 3)
+            importance_board[board_num] = max_stones / (min_stones ** 2)
             eval_board[board_num] = my_stones / sum_stones
         sum_importances = sum(importance_board)
         num_stones_evaluation = np.dot(eval_board, importance_board) / sum_importances
-        return 2 * ( num_stones_evaluation  - 0.5)
+        player_0_eval = 2 * ( num_stones_evaluation  - 0.5)
+        if player == 0:
+            return player_0_eval
+        else:
+            return -player_0_eval
 
     def get_user_move(self):
         success = False
@@ -617,6 +683,9 @@ class Game:
         print()
         
     def get_available_moves(self, player):
+
+        # TODO: Save moves on the two unused boards for the next iteration
+
         passive_moves = self.get_available_passive_moves(player)
         aggressive_moves = self.get_available_aggressive_moves(player)
         passive_dict = {}
