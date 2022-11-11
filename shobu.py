@@ -1,11 +1,9 @@
-from re import S
-from sre_constants import SUCCESS
-from turtle import pos
 import numpy as np
 import random
 import itertools
 import copy
 import threading
+import time
 
 class Board:
 
@@ -49,7 +47,7 @@ class Game:
 
         return False
 
-    def play_ai(self, play_first = False, show_eval = True, depth=3, n_threads=4):
+    def play_ai(self, play_first = False, show_eval = True, depth=3, n_threads=1):
         self.show_eval = show_eval
         if play_first:
             self.print_game()
@@ -64,7 +62,7 @@ class Game:
                 break
             self.get_user_move(self.user_player)
 
-    def run_ai_vs_ai(self, show_eval = True, depth=3, n_threads=4):
+    def run_ai_vs_ai(self, show_eval = True, depth=3, n_threads=1):
         self.show_eval = show_eval
         while True:
             self.print_game()
@@ -188,7 +186,9 @@ class Game:
             else:
                 return (-beta, best_move)
 
-    def depth_n_ai(self,n,player,n_threads=4):
+    def depth_n_ai(self,n,player,n_threads=1):
+
+        start_time = time.time()
 
         global top_alpha
         top_alpha = -np.infty
@@ -230,6 +230,7 @@ class Game:
         self.last_aggressive = (aggressive_move[0], aggressive_move[1][0], aggressive_move[2], aggressive_move[1][1])
 
         self.make_move(player,passive_move,aggressive_move)
+        print("Move took %s seconds" % round(time.time() - start_time,2))
 
     def evaluation(self, player):
         """
@@ -826,5 +827,5 @@ class Game:
 
 my_game = Game()
 #my_game.play_ai(play_first=False,n_threads=4,show_eval=False)
-my_game.run_ai_vs_ai()
+my_game.run_ai_vs_ai(n_threads=1)
 #my_game.play_two_player()
