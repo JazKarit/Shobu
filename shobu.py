@@ -37,77 +37,93 @@ class Game:
         self.ai_player = 1
         self.eval = 0
         self.best_move = None
-        self.available_moves = [None,None,None,None]
+        self.show_eval = True
 
-    def play_game(self):
-        self.print_game()
-        # Opening passive move to make a more balanced game
-        # passive = None
-        # valid_passive = False
-        # while not passive or not valid_passive:
-        #     passive_move_user = input("Passive Move: ")
-        #     passive = self.convert_move_to_computer(passive_move_user)
-        #     if not passive:
-        #         print("Passive move must stay on the same board")
-        #     else:
-        #         valid_passive = self.try_passive_move(self.user_player,passive[0],passive[1],passive[2])
-        #     self.last_passive = passive
-        #     print()
+    def end_game(self):
+        if self.evaluation(0) > 0.99:
+            print("Game Over. X's Win!")
+            return True
+        elif self.evaluation(1) > 0.99:
+            print("Game Over. O's Win!")
+            return True
 
+        return False
+
+    def play_ai(self, play_first = False, show_eval = True, depth=3, n_threads=4):
+        self.show_eval = show_eval
+        if play_first:
+            self.print_game()
+            self.get_user_move(self.user_player)
         while True:
-            #self.get_ai_random_move()
             self.print_game()
-            if self.evaluation(self.user_player) > 0.99:
-                print("You Win!")
+            if self.end_game():
                 break
-            elif self.evaluation(self.ai_player) > 0.99:
-                print("You Lose!")
-                break
-            self.depth_n_ai(4,self.ai_player)
-            #self.get_user_move()
-            # if self.evaluation(self.ai_player) < -0.0 or self.evaluation(self.ai_player) > 0.0:
-            #     self.depth_n_ai(3,self.ai_player)
-            # else:
-                # self.depth_n_ai(2,self.ai_player)
+            self.depth_n_ai(depth,self.ai_player, n_threads)
             self.print_game()
-            if self.evaluation(self.user_player) > 0.99:
-                print("You Win!")
+            if self.end_game():
                 break
-            elif self.evaluation(self.ai_player) > 0.99:
-                print("You Lose!")
+            self.get_user_move(self.user_player)
+
+    def run_ai_vs_ai(self, show_eval = True, depth=3, n_threads=4):
+        self.show_eval = show_eval
+        while True:
+            self.print_game()
+            if self.end_game():
                 break
-            self.get_user_move()
-            #self.depth_n_ai(4,self.ai_player)
-            #self.depth_n_ai(4,self.user_player)
+            self.depth_n_ai(depth, 1, n_threads)
+            self.print_game()
+            if self.end_game():
+                break
+            self.depth_n_ai(depth, 0, n_threads)
+
+    def play_two_player(self):
+        self.show_eval = False
+        while True:
+            self.print_game()
+            print("--------Player 1 Move--------\n")
+            if self.end_game():
+                break
+            self.get_user_move(0)
+            self.print_game()
+            print("--------Player 2 Move--------\n")
+            if self.end_game():
+                break
+            self.get_user_move(1)
+
+    
             
-            # if self.evaluation(self.ai_player) < -0.0 or self.evaluation(self.ai_player) > 0.0:
-            #     self.depth_n_ai(3,self.user_player)
-            # else:
-            #     self.depth_n_ai(2,self.user_player)
-            
-            
-
-    def get_ai_random_move(self):
-
-        passive_move, aggressive_move = random.choice(list(self.get_available_moves(self.ai_player)[0]))
-        
-        self.last_passive = passive_move
-        self.last_aggressive = (aggressive_move[0], aggressive_move[1][0], aggressive_move[2], aggressive_move[1][1])
-
-        self.boards[passive_move[0]].stones[self.ai_player].remove(passive_move[1])
-        self.boards[passive_move[0]].stones[self.ai_player].add(passive_move[2])
-        
-        
-
-        self.boards[aggressive_move[0]].stones[self.ai_player].remove(aggressive_move[1][0])
-        self.boards[aggressive_move[0]].stones[self.ai_player].add(aggressive_move[1][1])
+    def make_move(self,player,passive_move,aggressive_move):
+        enemy = (player + 1) % 2
+        self.boards[passive_move[0]].stones[player].remove(passive_move[1])
+        self.boards[passive_move[0]].stones[player].add(passive_move[2])
+        self.boards[aggressive_move[0]].stones[player].remove(aggressive_move[1][0])
+        self.boards[aggressive_move[0]].stones[player].add(aggressive_move[1][1])
         if aggressive_move[2]:
             pushed_stone_start_coord = aggressive_move[2][0]
             pushed_stone_end_coord = aggressive_move[2][1]
-            self.boards[aggressive_move[0]].stones[self.user_player].remove(pushed_stone_start_coord)
+            self.boards[aggressive_move[0]].stones[enemy].remove(pushed_stone_start_coord)
             if pushed_stone_end_coord:
-                self.boards[aggressive_move[0]].stones[self.user_player].add(pushed_stone_end_coord)
+                self.boards[aggressive_move[0]].stones[enemy].add(pushed_stone_end_coord)
     
+    def undo_move(self,player,passive_move,aggressive_move):
+        enemy = (player + 1) % 2
+        self.boards[passive_move[0]].stones[player].remove(passive_move[2])
+        self.boards[passive_move[0]].stones[player].add(passive_move[1])
+        self.boards[aggressive_move[0]].stones[player].remove(aggressive_move[1][1])
+        self.boards[aggressive_move[0]].stones[player].add(aggressive_move[1][0])
+
+        if aggressive_move[2]:
+            pushed_stone_start_coord = aggressive_move[2][0]
+            pushed_stone_end_coord = aggressive_move[2][1]
+            if pushed_stone_end_coord:
+                self.boards[aggressive_move[0]].stones[enemy].remove(pushed_stone_end_coord)
+            self.boards[aggressive_move[0]].stones[enemy].add(pushed_stone_start_coord)
+
+    def get_ai_random_move(self):
+        passive_move, aggressive_move = random.choice(list(self.get_available_moves(self.ai_player)))
+        self.last_passive = passive_move
+        self.last_aggressive = (aggressive_move[0], aggressive_move[1][0], aggressive_move[2], aggressive_move[1][1])
+        self.make_move(self.ai_player,passive_move,aggressive_move)
 
     def get_board_importances(self):
         importance_board = np.zeros(4)
@@ -134,46 +150,19 @@ class Game:
         if basic_eval == -1 or basic_eval == 1:
             return (basic_eval, None)
         for move in moves:
-            passive, aggressive = move
-
-            # Make the move
-            self.boards[passive[0]].stones[player].remove(passive[1])
-            self.boards[passive[0]].stones[player].add(passive[2])
-            self.boards[aggressive[0]].stones[player].remove(aggressive[1][0])
-            self.boards[aggressive[0]].stones[player].add(aggressive[1][1])
-            if aggressive[2]:
-                pushed_stone_start_coord = aggressive[2][0]
-                pushed_stone_end_coord = aggressive[2][1]
-                self.boards[aggressive[0]].stones[enemy].remove(pushed_stone_start_coord)
-                if pushed_stone_end_coord:
-                    self.boards[aggressive[0]].stones[enemy].add(pushed_stone_end_coord)
+            passive_move, aggressive_move = move
+            self.make_move(player,passive_move,aggressive_move)
 
             # Look deeper        
-            
             if n == 1:
                 possible_eval = self.evaluation(player)
             else:
-                followup_moves = self.get_available_moves(enemy)[0]
+                followup_moves = self.get_available_moves(enemy)
                 possible_eval, _ = self.evaluate_moves(followup_moves,enemy,n-1, not alpha_beta, alpha, beta, top=False)
                 possible_eval *= -1
-            # Undo the move
-            self.boards[passive[0]].stones[player].remove(passive[2])
-            self.boards[passive[0]].stones[player].add(passive[1])
-            self.boards[aggressive[0]].stones[player].remove(aggressive[1][1])
-            self.boards[aggressive[0]].stones[player].add(aggressive[1][0])
-
-            if aggressive[2]:
-                pushed_stone_start_coord = aggressive[2][0]
-                pushed_stone_end_coord = aggressive[2][1]
-                if pushed_stone_end_coord:
-                    self.boards[aggressive[0]].stones[enemy].remove(pushed_stone_end_coord)
-                self.boards[aggressive[0]].stones[enemy].add(pushed_stone_start_coord)
                 
-            
-            # Future wins/losses are slightly discounted
-            # if np.abs(possible_eval) > 0.9:
-            #     possible_eval *= 0.99 
-
+            # Undo the move
+            self.undo_move(player,passive_move,aggressive_move)    
             
             # Alpha beta pruning
             if alpha_beta:
@@ -181,13 +170,13 @@ class Game:
                     return (beta, None)
                 elif possible_eval > alpha:
                     alpha = possible_eval
-                    best_move = (passive, aggressive)
+                    best_move = (passive_move, aggressive_move)
             else:
                 if -possible_eval <= top_alpha or -possible_eval <= alpha:
                     return (-alpha, None)
                 elif -possible_eval < beta:
                     beta = -possible_eval
-                    best_move = (passive, aggressive)
+                    best_move = (passive_move, aggressive_move)
         if top:
             self.eval = alpha
             self.best_move = best_move
@@ -199,7 +188,7 @@ class Game:
             else:
                 return (-beta, best_move)
 
-    def depth_n_ai(self,n,player):
+    def depth_n_ai(self,n,player,n_threads=4):
 
         global top_alpha
         top_alpha = -np.infty
@@ -208,33 +197,26 @@ class Game:
         best_move = None
         best_eval = None
         i = 0
-        moves = self.get_available_moves(player)[0]
-        game_1 = copy.deepcopy(self)
-        game_2 = copy.deepcopy(self)
-        game_3 = copy.deepcopy(self)
-        game_4 = copy.deepcopy(self)
-        t1 = threading.Thread(game_1.evaluate_moves(moves[0:int(len(moves)/4)],player,n))
-        t2 = threading.Thread(game_2.evaluate_moves(moves[int(len(moves)/4):int(len(moves)/2)],player,n))
-        t3 = threading.Thread(game_3.evaluate_moves(moves[int(len(moves)/2):int(3*len(moves)/4)],player,n))
-        t4 = threading.Thread(game_4.evaluate_moves(moves[int(3*len(moves)/4):len(moves)],player,n))
-
-        # start threads
-        t1.start()
-        t2.start()
-        t3.start()
-        t4.start()
-    
-        # wait until threads finish their job
-        t1.join()
-        t2.join()
-        t3.join()
-        t4.join()
+        moves = self.get_available_moves(player)
         
-        evals = [game_1.eval, game_2.eval, game_3.eval, game_4.eval]
-        moves = [game_1.best_move, game_2.best_move, game_3.best_move]
-        best_eval = np.max(evals)
-        best_game = np.where(evals == best_eval)[0][0]
+        games = []
+        threads = []
+        for thread_num in range(n_threads):
+            game = copy.deepcopy(self)
+            games.append(game)
+            threads.append(threading.Thread(game.evaluate_moves(moves[int(len(moves)*thread_num/n_threads):int(len(moves)*(thread_num+1)/n_threads)],player,n)))
+            threads[thread_num].start()
 
+        for thread in threads:
+            thread.join()
+        evals = []
+        moves = []
+        for thread_num in range(n_threads):
+            evals.append(games[thread_num].eval)
+            moves.append(games[thread_num].best_move)
+        
+        best_eval = np.max(evals)
+        best_game = np.argmax(evals)
         best_move = moves[best_game]
 
         # Make the best move
@@ -247,45 +229,36 @@ class Game:
         self.last_passive = passive_move
         self.last_aggressive = (aggressive_move[0], aggressive_move[1][0], aggressive_move[2], aggressive_move[1][1])
 
-        # self.boards[passive_move[0]].make_aggressive_move(self.ai_player,passive_move[1])
-        # self.boards[aggressive_move[0]].make_aggressive_move(self.ai_player,aggressive_move[1])
-
-        self.boards[passive_move[0]].stones[player].remove(passive_move[1])
-        self.boards[passive_move[0]].stones[player].add(passive_move[2])
-        
-        
-
-        self.boards[aggressive_move[0]].stones[player].remove(aggressive_move[1][0])
-        self.boards[aggressive_move[0]].stones[player].add(aggressive_move[1][1])
-        if aggressive_move[2]:
-            pushed_stone_start_coord = aggressive_move[2][0]
-            pushed_stone_end_coord = aggressive_move[2][1]
-            self.boards[aggressive_move[0]].stones[enemy].remove(pushed_stone_start_coord)
-            if pushed_stone_end_coord:
-                self.boards[aggressive_move[0]].stones[enemy].add(pushed_stone_end_coord)
-
-
-            
-
+        self.make_move(player,passive_move,aggressive_move)
 
     def evaluation(self, player):
-        #moves = self.get_available_moves(player)
-        #move_fraction = (moves[1][0] + moves(player)[1][1]) / (moves(enemy)[1][0] + moves(enemy)[1][1])
-        #num_moves_evaluation = move_fraction - 0.5
+        """
+        Return a basic evaluation of the game. 
+        Evaluate each board based on the number of stones for each team. 
+        Then combine these board evaluations based on the importance of each board.
+        When a board has few stones of one player and more stones of the other player, 
+        the importance goes up since the game is more likely to end with that board.
+        """
         importance_board = [0, 0, 0, 0]
         eval_board = [0, 0, 0, 0]
         for board_num in range(4):
-            my_stones = len(self.boards[board_num].stones[0])
-            enemy_stones = len(self.boards[board_num].stones[1])
-            if my_stones == 0:
-                return -1
-            elif enemy_stones == 0:
-                return 1
-            max_stones = max(my_stones, enemy_stones)
-            min_stones = min(my_stones, enemy_stones)
-            sum_stones = my_stones + enemy_stones
+            p0_stones = len(self.boards[board_num].stones[0])
+            p1_stones = len(self.boards[board_num].stones[1])
+            if p0_stones == 0:
+                if player == 0:
+                    return -1
+                else:
+                    return 1
+            elif p1_stones == 0:
+                if player == 1:
+                    return -1
+                else:
+                    return 1
+            max_stones = max(p0_stones, p1_stones)
+            min_stones = min(p0_stones, p1_stones)
+            sum_stones = p0_stones + p1_stones
             importance_board[board_num] = max_stones / (min_stones ** 2)
-            eval_board[board_num] = my_stones / sum_stones
+            eval_board[board_num] = p0_stones / sum_stones
         sum_importances = sum(importance_board)
         num_stones_evaluation = np.dot(eval_board, importance_board) / sum_importances
         player_0_eval = 2 * ( num_stones_evaluation  - 0.5)
@@ -294,7 +267,7 @@ class Game:
         else:
             return -player_0_eval
 
-    def get_user_move(self):
+    def get_user_move(self,player):
         success = False
 
         while not success:
@@ -304,11 +277,11 @@ class Game:
             valid_passive = False
             while not passive or not valid_passive:
                 passive_move_user = input("Passive Move: ")
-                passive = self.convert_move_to_computer(passive_move_user)
+                passive = self.parse_move(passive_move_user)
                 if not passive:
                     print("Passive move must stay on the same board")
                 else:
-                    valid_passive = self.try_passive_move(self.user_player,passive[0],passive[1],passive[2])
+                    valid_passive = self.try_passive_move(player,passive[0],passive[1],passive[2])
             self.last_passive = passive
             print()
             self.print_game()
@@ -320,14 +293,14 @@ class Game:
             try_aggressive_again = True
             while try_aggressive_again:
                 aggressive_move_user = input("Aggressive Move: ")
-                aggressive = self.convert_move_to_computer(aggressive_move_user)
+                aggressive = self.parse_move(aggressive_move_user)
                 if not aggressive:
                     print("Aggressive move must stay on the same board")
                     try_again = input('Press "a" to try the aggressive move again or "p" to pick a different passive move: ')
                     if try_again == 'p':
                         try_aggressive_again = False
                         # Undo passive move
-                        self.try_passive_move(self.user_player,passive[0],passive[2],passive[1])
+                        self.try_passive_move(player,passive[0],passive[2],passive[1])
                     continue
                 if aggressive[0] not in required_aggressive_boards:
                     print("Aggressive move must happen on a board on the opposite side")
@@ -335,7 +308,7 @@ class Game:
                     if try_again == 'p':
                         try_aggressive_again = False
                         # Undo passive move
-                        self.try_passive_move(self.user_player,passive[0],passive[2],passive[1])
+                        self.try_passive_move(player,passive[0],passive[2],passive[1])
                     continue
                 if passive[2][0] - passive[1][0] != aggressive[2][0] - aggressive[1][0] or passive[2][1] - passive[1][1] != aggressive[2][1] - aggressive[1][1]:
                     print("Passive move and aggressive move do not match")
@@ -343,9 +316,9 @@ class Game:
                     if try_again == 'p':
                         try_aggressive_again = False
                         # Undo passive move
-                        self.try_passive_move(self.user_player,passive[0],passive[2],passive[1])
+                        self.try_passive_move(player,passive[0],passive[2],passive[1])
                     continue
-                valid_aggressive = self.try_aggressive_move(self.user_player,aggressive[0],aggressive[1],aggressive[2])
+                valid_aggressive = self.try_aggressive_move(player,aggressive[0],aggressive[1],aggressive[2])
                 if valid_aggressive:
                     try_aggressive_again = False
                     success = True
@@ -356,7 +329,7 @@ class Game:
                     if try_again == 'p':
                         try_aggressive_again = False
                         # Undo passive move
-                        self.try_passive_move(self.user_player,passive[0],passive[2],passive[1])
+                        self.try_passive_move(player,passive[0],passive[2],passive[1])
 
 
     def get_homeboards(self,player):
@@ -365,7 +338,28 @@ class Game:
         else:
             return [0,1]
 
-    def convert_move_to_computer(self, move):
+    def parse_move(self, move):
+        """
+        Parse the user's move.
+
+        Input: Cordinate Start  Coordinate End 
+               Columns are designated by letters a-h and rows are designated by numbers 1-8
+               Ex. e1 g3 moves the stone at the bottom left corner of the bottom right board
+                   two spaces diagonally upwards and to the right
+
+        Output: (board, start_coord, end_coord)
+                Board numbering:    + - +  + - +
+                                    | 0 |  | 1 |
+                                    + - +  + - +
+
+                                    + - +  + - +
+                                    | 2 |  | 3 |
+                                    + - +  + - +
+                Coords are of the form (y,x) with y,x in [0,3]
+                y = 0 is the top row of the board, y = 3 is the bottom row of the board
+                x = 0 is the left colum of the board, x = 3 is the right column of the board
+                Ex. The move e1 g3 becomes (3, (3,0), (1,2))
+        """
         move = move.replace(' ','')
         try:
             start_coord_x = self.letter_to_col[move[0]]
@@ -373,7 +367,7 @@ class Game:
             start_coord_y = 8 - int(move[1])
             end_coord_y = 8 - int(move[3])
         except:
-            return False
+            return None
         board_num = 0
         if start_coord_x >= 4:
             if end_coord_x >= 4:
@@ -381,17 +375,20 @@ class Game:
                 start_coord_x -= 4
                 end_coord_x -= 4
             else:
-                return False
+                return None
         if start_coord_y >= 4:
             if end_coord_y >= 4:
                 board_num += 2
                 start_coord_y -= 4
                 end_coord_y -= 4
             else:
-                return False
+                return None
         return (board_num, (start_coord_y,start_coord_x), (end_coord_y,end_coord_x))
 
     def try_move(self,player,passive,aggresive):
+        """
+        Attempt to make a move, but fail if move is illegal.
+        """
         success = self.try_passive_move(player,passive[0],passive[1],passive[2])
         if not success:
             return False
@@ -414,6 +411,9 @@ class Game:
         return True
 
     def try_passive_move(self,player,board,start_coord,end_coord):
+        """
+        Attempt to make a passive move, but fail if move is illegal.
+        """
         available_passive_moves = self.get_available_passive_moves(player)[board]
 
         if available_passive_moves and start_coord in available_passive_moves and end_coord in list(zip(*available_passive_moves[start_coord]))[0]:
@@ -425,6 +425,9 @@ class Game:
             return False
     
     def try_aggressive_move(self,player,board,start_coord,end_coord):
+        """
+        Attempt to make an aggressive move, but fail if move is illegal.
+        """
         available_aggressive_moves = self.get_available_aggressive_moves(player)[board]
         for move in available_aggressive_moves:
             if move[0][0] == start_coord and move[0][1] == end_coord:
@@ -456,34 +459,34 @@ class Game:
                     row_print += '  '
             return row_print
 
-        print('  + - - - - +    + - - - - +')
+        print('  + - - - - +     + - - - - +')
         row_num = 8
         for row in range(4):
-            row_print = str(row_num) + ' | '
+            print(str(row_num) + ' | ' + get_board_row_string(0,row) + '|  ' + str(row_num) + '  | ' + get_board_row_string(1,row) + '|')
             row_num -= 1
-            row_print += get_board_row_string(0,row)
-            row_print += '|    | '
-            row_print += get_board_row_string(1,row)
-            row_print += '|'
-            print(row_print)
-        print('  + - - - - +    + - - - - +')
-        print('    a b c d        e f g h')
-        print('  + - - - - +    + - - - - +')
+        print('  + - - - - +     + - - - - +')
+        print('    a b c d         e f g h')
+        print('  + - - - - +     + - - - - +')
         for row in range(4):
-            row_print = str(row_num) + ' | '
+            print(str(row_num) + ' | ' + get_board_row_string(2,row) + '|  ' + str(row_num) + '  | ' + get_board_row_string(3,row) + '|')
             row_num -= 1
-            row_print += get_board_row_string(2,row)
-            row_print += '|    | '
-            row_print += get_board_row_string(3,row)
-            row_print += '|'
-            print(row_print)
-        print('  + - - - - +    + - - - - +')
-        print('    a b c d        e f g h')
+        print('  + - - - - +     + - - - - +')
+        print('    a b c d         e f g h')
         print()
-        print("Current Evaluation: " + str(self.eval))
+        if self.show_eval:
+            print("Current Evaluation: " + str(self.eval))
         print()
         
     def get_available_moves(self, player):
+        """
+        Return a list of all moves available to the given player.
+        Each move is of the form: (passive_move, aggressive_move)
+            Passive moves are of the form: (board_num, start_coord, end_coord)
+            Aggressive moves are of the form: (board_num,(start_coord,end_coord),push)
+                If a stone was pushed, push is of the form: (pushed_stone_start_coord, pushed_stone_end_coord) 
+                    If the pushed stone was pushed off the board, pushed_stone_end_coord = None
+                If no stone was pushed, push = None
+        """
 
         # TODO: Save moves on the two unused boards for the next iteration
 
@@ -513,8 +516,6 @@ class Game:
                         aggressive_dict[heading] = set()
                     aggressive_dict[heading].add((board_num,(start_coord,end_coord),push))
         moves = list()
-        passive_left_headings = 0
-        passive_right_headings = 0
         for heading, passive_moves in passive_dict.items():
             aggressive_moves = aggressive_dict[heading]
             passive_left_moves = set(filter(lambda move: move[0] == 0 or move[0] == 2, passive_moves))
@@ -524,16 +525,19 @@ class Game:
             left_right_moves = list(itertools.product(passive_left_moves,aggressive_right_moves))
             right_left_moves = list(itertools.product(passive_right_moves,aggressive_left_moves))
             moves += left_right_moves + right_left_moves
-            if len(passive_left_moves) > 0:
-                passive_left_headings += 1
-            if len(passive_right_moves) > 0:
-                passive_right_headings += 1
                 
-        return (moves, (passive_left_headings, passive_right_headings))
+        return moves
         
 
     def get_available_passive_moves(self, player):
+        """
+        Return a list of moves for each board
+            The moves for a board is a dictionary with key = start_coord, value = (end_coord, heading)
+                heading is of the form (dy, dx) for dy, dx in [-2,2] with (dy == dx or dy == 0 or dx == 0) and not (dy == 0 and dx == 0)
 
+        Note that this function does not check if there is a corresponding aggressive move available,
+        so not all passive moves returned are neccesarily legal.
+        """
         moves = [None,None,None,None]
         homeboards = self.get_homeboards(player)
 
@@ -631,7 +635,23 @@ class Game:
 
         return moves
 
-    def get_stone_moves(self, final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones):
+
+    def get_available_aggressive_moves(self, player):
+
+        """
+        Return a list of moves for each board
+            The moves for a board is a list with each element of the form:
+                ((start coord, final coods), push, heading)
+                If a stone was pushed, push is of the form: (pushed_stone_start_coord, pushed_stone_end_coord) 
+                    If the pushed stone was pushed off the board, pushed_stone_end_coord = None
+                If no stone was pushed, push = None
+                heading is of the form (dy, dx) for dy, dx in [-2,2] with (dy == dx or dy == 0 or dx == 0) and not (dy == 0 and dx == 0)
+
+        Note that this function does not check if there is a corresponding passive move available,
+        so not all aggressive moves returned are neccesarily legal.
+        """
+
+        def get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones):
             pushed = None
             if final_loc in player_stones:
                 return False
@@ -655,171 +675,156 @@ class Game:
                         pushed = (pushed_stone_loc, final_loc_plus_1)
             return (final_loc, pushed)
 
-    def get_board_aggressive_moves(self, player, board):
-        board_moves = [] # ((start coord, final coods), ((stone_pushed),(stone_pushed final coods)), (dy, dx))
-        player_stones = board.stones[player]
-        enemy_stones = board.stones[(player + 1) % 2]
-
-        for stone in player_stones:
-            
-            x = stone[1]
-            y = stone[0]
-
-            left_room = min(x, 2)
-            up_room = min(y, 2)
-            right_room = min(3 - x, 2)
-            down_room = min(3 - y, 2)
-
-            up_left_room = min(left_room, up_room)
-            up_right_room = min(right_room, up_room)
-            down_right_room = min(right_room, down_room)
-            down_left_room = min(left_room, down_room)
-
-            pushed_stone_loc = None
-
-            dy = 0
-            for dx in range(1, left_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y, x - dx)
-                final_loc_plus_1 = (y, x - dx - 1)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (dy, -dx))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-            
-            pushed_stone_loc = None
-            for dx in range(1, right_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y, x + dx)
-                final_loc_plus_1 = (y, x + dx + 1)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (dy, dx))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-
-            dx = 0
-            pushed_stone_loc = None
-            for dy in range(1, up_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y - dy, x)
-                final_loc_plus_1 = (y - dy - 1, x)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (-dy, dx))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-
-            pushed_stone_loc = None
-            for dy in range(1, down_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y + dy, x)
-                final_loc_plus_1 = (y + dy + 1, x)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (dy, dx))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-
-            pushed_stone_loc = None
-            for dr in range(1, up_left_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y - dr, x - dr)
-                final_loc_plus_1 = (y - dr - 1, x - dr - 1)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (-dr, -dr))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-
-            pushed_stone_loc = None
-            for dr in range(1, up_right_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y - dr, x + dr)
-                final_loc_plus_1 = (y - dr - 1, x + dr + 1)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (-dr, dr))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-
-            pushed_stone_loc = None
-            for dr in range(1, down_right_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y + dr, x + dr)
-                final_loc_plus_1 = (y + dr + 1, x + dr + 1)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (dr, dr))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-            
-            pushed_stone_loc = None
-            for dr in range(1, down_left_room+1):
-                # Add move if there are no blocking stones
-                final_loc = (y + dr, x - dr)
-                final_loc_plus_1 = (y + dr + 1, x - dr - 1)
-                move = self.get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
-                if move:
-                    full_move = ((stone, move[0]), move[1], (dr, -dr))
-                    board_moves.append(full_move)
-                    if full_move[1]: 
-                        # There is a pushed stone
-                        pushed_stone_loc = full_move[1][0]
-                else:
-                    break
-        return board_moves
-
-    def get_available_aggressive_moves(self, player):
 
         moves = [None,None,None,None]
 
-        for board in range(4):
+        for board_num in range(4):
+            board_moves = [] # ((start coord, final coods), ((stone_pushed),(stone_pushed final coods)), (dy, dx))
+            board = self.boards[board_num]
+            player_stones = board.stones[player]
+            enemy_stones = board.stones[(player + 1) % 2]
 
-            moves[board] = self.get_board_aggressive_moves(player, self.boards[board])
+            for stone in player_stones:
+                
+                x = stone[1]
+                y = stone[0]
+
+                left_room = min(x, 2)
+                up_room = min(y, 2)
+                right_room = min(3 - x, 2)
+                down_room = min(3 - y, 2)
+
+                up_left_room = min(left_room, up_room)
+                up_right_room = min(right_room, up_room)
+                down_right_room = min(right_room, down_room)
+                down_left_room = min(left_room, down_room)
+
+                pushed_stone_loc = None
+
+                dy = 0
+                for dx in range(1, left_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y, x - dx)
+                    final_loc_plus_1 = (y, x - dx - 1)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (dy, -dx))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+                
+                pushed_stone_loc = None
+                for dx in range(1, right_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y, x + dx)
+                    final_loc_plus_1 = (y, x + dx + 1)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (dy, dx))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+
+                dx = 0
+                pushed_stone_loc = None
+                for dy in range(1, up_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y - dy, x)
+                    final_loc_plus_1 = (y - dy - 1, x)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (-dy, dx))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+
+                pushed_stone_loc = None
+                for dy in range(1, down_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y + dy, x)
+                    final_loc_plus_1 = (y + dy + 1, x)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (dy, dx))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+
+                pushed_stone_loc = None
+                for dr in range(1, up_left_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y - dr, x - dr)
+                    final_loc_plus_1 = (y - dr - 1, x - dr - 1)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (-dr, -dr))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+
+                pushed_stone_loc = None
+                for dr in range(1, up_right_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y - dr, x + dr)
+                    final_loc_plus_1 = (y - dr - 1, x + dr + 1)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (-dr, dr))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+
+                pushed_stone_loc = None
+                for dr in range(1, down_right_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y + dr, x + dr)
+                    final_loc_plus_1 = (y + dr + 1, x + dr + 1)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (dr, dr))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+                
+                pushed_stone_loc = None
+                for dr in range(1, down_left_room+1):
+                    # Add move if there are no blocking stones
+                    final_loc = (y + dr, x - dr)
+                    final_loc_plus_1 = (y + dr + 1, x - dr - 1)
+                    move = get_stone_moves(final_loc, final_loc_plus_1, pushed_stone_loc, player_stones, enemy_stones)
+                    if move:
+                        full_move = ((stone, move[0]), move[1], (dr, -dr))
+                        board_moves.append(full_move)
+                        if full_move[1]: 
+                            # There is a pushed stone
+                            pushed_stone_loc = full_move[1][0]
+                    else:
+                        break
+            moves[board_num] = board_moves
         return moves
 
 my_game = Game()
-
-#my_game.get_boards_as_array()
-
-my_game.play_game()
-
-
-# my_game.try_move(0,(2,(3,0),(2,1)),(3,(3,1),(2,2)))
-# my_game.try_move(1,(0,(0,0),(2,2)),(3,(0,1),(2,3)))
-# my_game.try_passive_move(0,2,(3,0),(1,0))
-# my_game.print_game()
-# my_game.try_aggressive_move(1,2,(0,1),(1,0))
-# my_game.print_game()
-
-
+#my_game.play_ai(play_first=False,n_threads=4,show_eval=False)
+my_game.run_ai_vs_ai()
+#my_game.play_two_player()
